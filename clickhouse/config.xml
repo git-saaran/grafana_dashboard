@@ -1,1 +1,5 @@
-
+<!-- clickhouse/config.xml -->
+<clickhouse>
+    <listen_host>0.0.0.0</listen_host>
+    <timezone>Asia/Kolkata</timezone>
+</clickhouse>
