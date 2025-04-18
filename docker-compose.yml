@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  # ClickHouse database
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    ports:
+      - "8123:8123" # HTTP interface
+      - "9000:9000" # Native interface
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
+      - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/custom.xml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - clickhouse
+    restart: unless-stopped
+
+  # Python data collector
+  data-collector:
+    build:
+      context: ./data-collector
+      dockerfile: Dockerfile
+    container_name: zerodha-data-collector
+    volumes:
+      - ./data-collector:/app
+      - ./access_token.txt:/app/access_token.txt:ro
+    environment:
+      - TZ=Asia/Kolkata
+    restart: unless-stopped
+    depends_on:
+      - clickhouse
+
+volumes:
+  clickhouse-data:
+  grafana-data:
