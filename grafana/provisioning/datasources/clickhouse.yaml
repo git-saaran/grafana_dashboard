@@ -1,1 +1,18 @@
+# grafana/provisioning/datasources/clickhouse.yaml
+apiVersion: 1
 
+datasources:
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    url: http://clickhouse:8123
+    database: zerodha
+    user: default
+    secureJsonData:
+      password: default
+    jsonData:
+      defaultDatabase: zerodha
+      port: 8123
+      username: default
+      tlsSkipVerify: true
+    editable: true
