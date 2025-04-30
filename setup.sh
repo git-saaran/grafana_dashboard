@@ -1,32 +1,43 @@
 #!/bin/bash
+# File to be placed in ./setup.sh
+
+set -e
+
+echo "Setting up Zerodha Grafana Dashboard"
 
 # Create necessary directories
-mkdir -p clickhouse grafana/provisioning/datasources grafana/provisioning/dashboards grafana/dashboards data-collector
+mkdir -p clickhouse/config
+mkdir -p clickhouse/initdb
+mkdir -p grafana/provisioning/datasources
+mkdir -p grafana/provisioning/dashboards
+mkdir -p data-collector
 
-# Copy files to appropriate locations
-# ClickHouse config
-cp clickhouse-config.xml clickhouse/config.xml
-cp clickhouse-users.xml clickhouse/users.xml
-
-# Grafana config
-cp grafana-datasource-config.yaml grafana/provisioning/datasources/clickhouse.yaml
-cp grafana-dashboard-config.yaml grafana/provisioning/dashboards/zerodha.yaml
-cp grafana-dashboard-json.json grafana/dashboards/zerodha-holdings.json
-
-# Data collector
-cp data-collector-script.py data-collector/collect_data.py
-cp data-collector-dockerfile data-collector/Dockerfile
-cp data-collector-requirements.txt data-collector/requirements.txt
+# Copy the access token file to the data-collector directory
+if [ -f "access_token.txt" ]; then
+  cp access_token.txt data-collector/
+else
+  echo "Warning: access_token.txt not found in the current directory."
+  echo "Please make sure to run login.py and copy the access_token.txt file to the data-collector directory."
+fi
 
 # Create .env file
-echo "Creating .env file in data-collector directory..."
-cat > data-collector/.env << EOL
-API_KEY=${API_KEY:-}
-API_SECRET=${API_SECRET:-}
-USER_ID=${USER_ID:-}
-PASSWORD=${PASSWORD:-}
-TOTP=${TOTP:-}
+cat > .env << EOL
+ZERODHA_API_KEY=$(grep -o 'API_KEY = "[^"]*"' login.py | cut -d'"' -f2)
+
+# Get server IP address (for informational purposes only)
+SERVER_IP=$(hostname -I | awk '{print $1}')
 EOL
 
-echo "Setup complete. Make sure to fill in your API credentials in data-collector/.env"
-echo "Run 'docker-compose up -d' to start the services"
+echo "Docker Compose setup complete. Starting services..."
+docker-compose up -d
+
+echo "Waiting for services to start..."
+sleep 30  # Increased wait time to allow plugin installation
+
+echo "Installation complete!"
+echo "Grafana dashboard is now available at http://$(hostname -I | awk '{print $1}')"
+echo "Default credentials: admin / admin"
+echo ""
+echo "Note: The ClickHouse plugin for Grafana will be installed automatically."
+echo "If you encounter any issues with the data source, please check the Grafana logs:"
+echo "  docker-compose logs grafana"
