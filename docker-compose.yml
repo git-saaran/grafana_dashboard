@@ -1,55 +1,71 @@
-version: "3.8"
+version: '3.8'
 
 services:
-  # ClickHouse database
   clickhouse:
     image: clickhouse/clickhouse-server:latest
-    container_name: clickhouse
     ports:
-      - "8123:8123" # HTTP interface
-      - "9000:9000" # Native interface
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native interface
     volumes:
       - clickhouse-data:/var/lib/clickhouse
-      - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
-      - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/custom.xml:ro
+      - ./clickhouse/config:/etc/clickhouse-server/config.d
+      - ./clickhouse/initdb:/docker-entrypoint-initdb.d
+    environment:
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+      - CLICKHOUSE_DB=zerodha_data
     restart: unless-stopped
     healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
       retries: 3
 
-  # Grafana for visualization
   grafana:
     image: grafana/grafana:latest
-    container_name: grafana
     ports:
-      - "3000:3000"
+      - "80:3000"  # Expose on port 80 instead of 3000 to make it accessible via the IP
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
     environment:
+      - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      # Use a relative URL to avoid IP dependency
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
     depends_on:
       - clickhouse
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
-  # Python data collector
   data-collector:
     build:
       context: ./data-collector
       dockerfile: Dockerfile
-    container_name: zerodha-data-collector
     volumes:
       - ./data-collector:/app
-      - ./access_token.txt:/app/access_token.txt:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     environment:
+      - ZERODHA_API_KEY=${ZERODHA_API_KEY}
+      - ZERODHA_ACCESS_TOKEN_FILE=/app/access_token.txt
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=password
+      - CLICKHOUSE_DB=zerodha_data
       - TZ=Asia/Kolkata
-    restart: unless-stopped
     depends_on:
-      - clickhouse
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   clickhouse-data:
