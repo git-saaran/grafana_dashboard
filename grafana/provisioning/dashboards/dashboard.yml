@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: 'Zerodha Dashboard'
+    folder: ''
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards
