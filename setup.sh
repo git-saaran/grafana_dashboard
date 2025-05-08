@@ -3,7 +3,7 @@
 
 set -e
 
-echo "Setting up Zerodha Grafana Dashboard"
+echo "Setting up Zerodha Grafana Dashboard with Token Manager"
 
 # Create necessary directories
 mkdir -p clickhouse/config
@@ -11,18 +11,47 @@ mkdir -p clickhouse/initdb
 mkdir -p grafana/provisioning/datasources
 mkdir -p grafana/provisioning/dashboards
 mkdir -p data-collector
+mkdir -p token-manager
 
-# Copy the access token file to the data-collector directory
-if [ -f "access_token.txt" ]; then
-  cp access_token.txt data-collector/
+# Set up token manager files
+cp token_manager.py token-manager/
+cp login_1.py token-manager/
+cp token-manager/Dockerfile token-manager/
+cp token-manager/requirements.txt token-manager/
+cp token-manager/entrypoint.sh token-manager/
+chmod +x token-manager/entrypoint.sh
+
+# Copy existing tokens if available
+if [ -f "fyers_refresh_token.txt" ]; then
+  cp fyers_refresh_token.txt token-manager/
+  echo "Copied existing refresh token"
 else
-  echo "Warning: access_token.txt not found in the current directory."
-  echo "Please make sure to run login.py and copy the access_token.txt file to the data-collector directory."
+  echo "Note: No existing refresh token found. The token manager will run login.py to generate one."
 fi
 
-# Create .env file
+if [ -f "fyers_access_token.txt" ]; then
+  cp fyers_access_token.txt token-manager/
+  cp fyers_access_token.txt data-collector/access_token.txt
+  echo "Copied existing access token"
+else
+  echo "Note: No existing access token found. The token manager will generate one on startup."
+fi
+
+# Create .env file for token manager
+if [ -f ".env" ]; then
+  cp .env token-manager/
+  echo "Copied .env file to token manager"
+else
+  # Create a basic .env file
+  echo "# Fyers API credentials" > token-manager/.env
+  read -p "Enter your Fyers PIN: " FYERS_PIN
+  echo "FYERS_PIN=$FYERS_PIN" >> token-manager/.env
+  echo "Created new .env file with PIN"
+fi
+
+# Create .env file for main project
 cat > .env << EOL
-ZERODHA_API_KEY=$(grep -o 'API_KEY = "[^"]*"' login.py | cut -d'"' -f2)
+ZERODHA_API_KEY=$(grep -o 'API_KEY = "[^"]*"' login_1.py | cut -d'"' -f2 || echo "your_api_key_here")
 
 # Get server IP address (for informational purposes only)
 SERVER_IP=$(hostname -I | awk '{print $1}')
@@ -41,3 +70,6 @@ echo ""
 echo "Note: The ClickHouse plugin for Grafana will be installed automatically."
 echo "If you encounter any issues with the data source, please check the Grafana logs:"
 echo "  docker-compose logs grafana"
+echo ""
+echo "Token manager logs can be viewed with:"
+echo "  docker-compose logs token-manager"
